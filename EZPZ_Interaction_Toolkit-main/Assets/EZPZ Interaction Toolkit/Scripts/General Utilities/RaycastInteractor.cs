@@ -24,8 +24,6 @@ public class RaycastInteractor : MonoBehaviour
     public float rayLength = 15;
     public float touchDistanceDefault = 5;
     public float holdingDistanceDefault = 1.5f;
-    public Transform pickupAttachPoint;
-    public Transform dropoffPoint;
 
     [Header("Hover Text Settings")]
     public GameObject hoverTextRig;
@@ -41,51 +39,36 @@ public class RaycastInteractor : MonoBehaviour
     public GameObject tooFarIcon;
     public Transform environmentHit;
     public Transform generalHit;
-    public Image throwForceBar;
 
     [Header("System Stuff (usually do not touch)")]
     public InteractableGeneral subject;
     public InteractableGeneral prevHitSubject;
     public InteractableGeneral hitSubject;
-    public Holdable holdableSubject;
+    public Holdable moveSubject;
     public Holdable prevMoveSubject;
     public Typable typeSubject;
     public bool interactState = false;
     public bool prevInteractState = false;
     public Renderer environmentHitIndicatorRenderer;
     public Renderer generalHitIndicatorRenderer;
-    public PlayerInput myPlayerInput; 
+    public PlayerInput myPlayerInput;
+    Rigidbody subjectRbody;
     public float originalRayLength;
     public EventSystem myEventSystem;
     public Transform previousMoveParent;
     public bool cameraCleanupOnStart = true;
     public bool didHit = false;
     public bool primaryLiftFlag = false;
-    Rigidbody subjectRbody;
-    RaycastHit hit;
-    public float primaryHoldTime = 0;
-    public bool throwFlag = false;//intended as the safety flag for throwing, true means you can throw;
     // Start is called before the first frame update
     void Start()
     {
-        primaryHoldTime = 0;
-        throwFlag = false;
-
-
         if (transform.localScale.x != 1 || transform.localScale.y != 1 || transform.localScale.z != 1)
         {
             Debug.LogError("!!!!! ALERT !!!!!" + name + " SCALE IS NOT (1,1,1). This will cause object pickup & drop problems. Reset scale to (1,1,1)");
         }
 
-        if (dropoffPoint == null)
-            dropoffPoint = transform;
-        
-
         if (rayPointer == null)
             rayPointer = transform;
-
-        if (pickupAttachPoint == null)
-            pickupAttachPoint = rayPointer;
 
         if (environmentHit != null)
         {
@@ -111,6 +94,19 @@ public class RaycastInteractor : MonoBehaviour
             CameraCleanup();
 
         EventSystemCleanup();
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        //interactState = Key
+
+        HandleEnvironmentRaycast();
+        HandleRaycastInteractions();
+
+        prevHitSubject = hitSubject;
+        prevInteractState = interactState;
+        interactState = false;
     }
 
     public void CameraCleanup()
@@ -141,49 +137,6 @@ public class RaycastInteractor : MonoBehaviour
         }
     }
 
-    // Update is called once per frame
-    void Update()
-    {
-        //interactState = Key
-
-        HandleEnvironmentRaycast();
-        HandleRaycastInteractions();
-        TrackHoldTime();
-
-        prevHitSubject = hitSubject;
-        prevInteractState = interactState;
-        interactState = false;
-    }
-
-    public void TrackHoldTime()
-    {
-        if(!primaryLiftFlag)
-        {
-            primaryHoldTime += Time.deltaTime;
-
-            if(throwForceBar != null)
-            { 
-                if (holdableSubject != null)
-                {
-                    if (holdableSubject.maxThrowHoldTime > 0 && holdableSubject.throwForceFactor > 0 && throwFlag)
-                    {
-                        //throwForceBar.fillAmount = Mathf.Min(1, primaryHoldTime / holdableSubject.maxThrowHoldTime);
-                        throwForceBar.fillAmount = primaryHoldTime / holdableSubject.maxThrowHoldTime;
-                    }
-                }
-            }
-        }
-        else
-        {
-            primaryHoldTime = 0;
-
-            if(throwForceBar != null)
-            {
-                throwForceBar.fillAmount = 0;
-            }
-        }
-    }
-
     public void EventSystemCleanup()
     {
         if (myEventSystem != null)
@@ -205,7 +158,7 @@ public class RaycastInteractor : MonoBehaviour
 
     public void OnFire()
     {
-        Debug.Log("OnFire");
+        //Debug.Log("OnFire");
         ForceInteract();
 
         primaryLiftFlag = false;
@@ -223,23 +176,10 @@ public class RaycastInteractor : MonoBehaviour
             subject.onPrimaryInteractLift.Invoke();
         }
 
-        if (holdableSubject != null)
+        if (moveSubject != null)
         {
-            if (holdableSubject.dropOnKeyLift)
-                DropHoldable();
-
-
-            if (holdableSubject.moving)
-            {
-                if (throwFlag)
-                {
-                    DropHoldable();
-                }
-                else
-                {
-                    throwFlag = true;
-                }
-            }  
+            if (moveSubject.dropOnKeyLift)
+                DropMovable();
         }
     }
 
@@ -263,33 +203,29 @@ public class RaycastInteractor : MonoBehaviour
 
     public void HandleSecondaryInteract()
     {
-        //Debug.Log("On Secondary Interact");
-
         if (subject != null)
         {
             if (!subject.restrictSecondaryToHeldOnly)
             {
                 subject.onSecondaryInteract.Invoke();
             }
-        }
-
-        if (holdableSubject != null)
-        {
-            if (holdableSubject.restrictSecondaryToHeldOnly)
+            else
             {
-                if (holdableSubject.isActiveAndEnabled)
+                if (moveSubject != null)
                 {
-                    holdableSubject.onSecondaryInteract.Invoke();
-                }
+                    if (moveSubject.isActiveAndEnabled)
+                    {
+                        subject.onSecondaryInteract.Invoke();
+                    }
 
-                //check if last event disabled the subject
-                if (!holdableSubject.isActiveAndEnabled)
-                {
-                    //delink subject if it is disabled
-                    //(e.g. for when it is being used for an "eat" interaction)
-                    holdableSubject.Drop();
-                    holdableSubject = null;
-                    subject = null;
+                    //check if last event disabled the subject
+                    if (!moveSubject.isActiveAndEnabled)
+                    {
+                        //delink subject if it is disabled
+                        //(e.g. for when it is being used for an "eat" interaction)
+                        moveSubject = null;
+                        subject = null;
+                    }
                 }
             }
         }
@@ -305,19 +241,19 @@ public class RaycastInteractor : MonoBehaviour
             }
             else
             {
-                if (holdableSubject != null)
+                if (moveSubject != null)
                 {
-                    if (holdableSubject.isActiveAndEnabled)
+                    if (moveSubject.isActiveAndEnabled)
                     {
                         subject.onSecondaryInteractLift.Invoke();
                     }
 
                     //check if last event disabled the subject
-                    if (!holdableSubject.isActiveAndEnabled)
+                    if (!moveSubject.isActiveAndEnabled)
                     {
                         //delink subject if it is disabled
                         //(e.g. for when it is being used for an "eat" interaction)
-                        holdableSubject = null;
+                        moveSubject = null;
                         subject = null;
                     }
                 }
@@ -349,6 +285,8 @@ public class RaycastInteractor : MonoBehaviour
 
     public void HandleRaycastInteractions()
     {
+        RaycastHit hit;
+
         didHit = Physics.Raycast(rayPointer.position, rayPointer.TransformDirection(Vector3.forward), out hit, rayLength, layerMask);
 
         if (didHit)
@@ -441,8 +379,8 @@ public class RaycastInteractor : MonoBehaviour
                 //subject.onFirstInteract.Invoke();
                 //legacy-----
 
-                HandleHoldablesOnRaycastHit(subject);
-                HandleTypablesOnRaycastHit(subject);
+                HandleMovables(subject);
+                HandleTypables(subject);
             }
         }
         else
@@ -475,17 +413,14 @@ public class RaycastInteractor : MonoBehaviour
             if (mode)
             {
                 hoverTextRig.SetActive(true);
-
-                if (holdableSubject == null)
-                {
+                if (moveSubject == null)
                     SyncHoverText(subject.hoverText);
-                }
                 else
                 {
-                    if (holdableSubject.heldText.Length > 0)
-                        SyncHoverText(holdableSubject.heldText);
+                    if (moveSubject.heldText.Length > 0)
+                        SyncHoverText(subject.heldText);
                     else
-                        SyncHoverText(holdableSubject.hoverText);
+                        SyncHoverText(subject.hoverText);
                 }
             }
             else
@@ -512,99 +447,96 @@ public class RaycastInteractor : MonoBehaviour
 
     }
 
-    void HandleHoldablesOnRaycastHit(InteractableGeneral hitSubject)
+    void HandleMovables(InteractableGeneral hitSubject)
     {
 
-        if (holdableSubject == null)
+        if (moveSubject == null)
         {
-            holdableSubject = hitSubject.GetComponent<Holdable>();
+            moveSubject = hitSubject.GetComponent<Holdable>();
         }
         else
         {
             //Debug.Log("Pre-existing object!");
-            //DropHoldable();
+            DropMovable();
         }
 
-        if (holdableSubject != null)
+        if (moveSubject != null)
         {
-            if (!holdableSubject.moving)
+            if (!moveSubject.moving)
             {
-                GrabHoldable();
+                GrabMovable();
             }
             else
             {
-                
-                if (holdableSubject.myRayManipulator == this)
+                if (moveSubject.myRayManipulator == this)
                 {
-                    //DropHoldable();
-                    //throwFlag = true;
+                    DropMovable();
                 }
                 else
                 {
-                    Holdable newGrab = holdableSubject;
-                    holdableSubject.myRayManipulator.DropHoldable();
+                    Holdable newGrab = moveSubject;
+                    moveSubject.myRayManipulator.DropMovable();
 
-                    holdableSubject = newGrab;
-                    GrabHoldable();
+                    moveSubject = newGrab;
+                    GrabMovable();
                 }
-                
             }
         }
     }
 
-    public void GrabHoldable()
+    public void GrabMovable()
     {
         //Pick up objects
-        holdableSubject.Grab(this);
-        previousMoveParent = holdableSubject.transform.parent;
-        holdableSubject.moving = true;
+        moveSubject.Grab(this);
+        previousMoveParent = moveSubject.transform.parent;
+        moveSubject.moving = true;
 
-        if (holdableSubject.noCollideOnHold)
+        if (moveSubject.noCollideOnHold)
         {
-            Holdable.SetColliderIsTrigger(holdableSubject, true);
+            Holdable.SetColliderIsTrigger(moveSubject, true);
         }
 
-        if (holdableSubject.groundPlace)
+        if (moveSubject.groundPlace)
         {
-            holdableSubject.transform.position = environmentHit.position + holdableSubject.groundPlaceOffset;
-            holdableSubject.transform.parent = environmentHit;
+            moveSubject.transform.position = environmentHit.position + moveSubject.groundPlaceOffset;
+            moveSubject.transform.parent = environmentHit;
         }
         else
         {
-            Vector3 attachPos = pickupAttachPoint.position;
+            Vector3 attachPos = rayPointer.position;
 
-            if (holdableSubject.customHoldDistance <= 0)
+            if (moveSubject.customHoldDistance <= 0)
             {
-                attachPos += pickupAttachPoint.forward * holdingDistanceDefault;
+                attachPos += rayPointer.forward * holdingDistanceDefault;
             }
             else
             {
-                attachPos += pickupAttachPoint.forward * holdableSubject.customHoldDistance;
+                attachPos += rayPointer.forward * moveSubject.customHoldDistance;
             }
 
 
-            if (holdableSubject.attachPoint != null)
+            if (moveSubject.attachPoint != null)
             {
                 //swap parentage first
-                holdableSubject.attachPoint.parent = null;
-                holdableSubject.transform.parent = holdableSubject.attachPoint;
+                moveSubject.attachPoint.parent = null;
+                moveSubject.transform.parent = moveSubject.attachPoint;
 
                 //align rotations and positions;
-                holdableSubject.attachPoint.transform.position = attachPos;
-                holdableSubject.attachPoint.transform.rotation = pickupAttachPoint.rotation;
+                moveSubject.attachPoint.transform.position = attachPos;
+                moveSubject.attachPoint.transform.rotation = rayPointer.rotation;
 
                 //return parentage
-                holdableSubject.transform.parent = pickupAttachPoint;
-                holdableSubject.attachPoint.parent = holdableSubject.transform;
+                moveSubject.transform.parent = rayPointer;
+                moveSubject.attachPoint.parent = moveSubject.transform;
 
             }
             else
             {
-                holdableSubject.transform.position = attachPos;
-                holdableSubject.transform.parent = pickupAttachPoint;
+                moveSubject.transform.position = attachPos;
+                moveSubject.transform.parent = rayPointer;
             }
 
-            subjectRbody = holdableSubject.GetComponent<Rigidbody>();
+            subjectRbody = moveSubject.GetComponent<Rigidbody>();
             if (subjectRbody != null)
             {
                 subjectRbody.useGravity = false;
@@ -613,37 +545,16 @@ public class RaycastInteractor : MonoBehaviour
         }
     }
 
-    public void DropHoldable()
+    public void DropMovable()
     {
-        if (holdableSubject != null)
+        if (moveSubject != null)
         {
-            throwFlag = false;
+            moveSubject.moving = false;
+            moveSubject.Drop();
 
-            holdableSubject.moving = false;
-            holdableSubject.Drop();
-
-            if (holdableSubject.noCollideOnHold)
+            if (moveSubject.noCollideOnHold)
             {
-                Holdable.SetColliderIsTrigger(holdableSubject, false);
-            }
-
-            if (!holdableSubject.groundPlace)
-            {
-                if (dropoffPoint != null)
-                {
-                    Vector3 attachPos = dropoffPoint.position;
-
-                    if (holdableSubject.customHoldDistance <= 0)
-                    {
-                        attachPos += dropoffPoint.forward * holdingDistanceDefault;
-                    }
-                    else
-                    {
-                        attachPos += dropoffPoint.forward * holdableSubject.customHoldDistance;
-                    }
-
-                    holdableSubject.transform.position = attachPos;
-                }
+                Holdable.SetColliderIsTrigger(moveSubject, false);
             }
 
             if (subjectRbody != null)
@@ -651,55 +562,35 @@ public class RaycastInteractor : MonoBehaviour
                 subjectRbody.useGravity = true;
                 subjectRbody.isKinematic = false;
 
-                if (holdableSubject.throwForceFactor > 0)
+                if (moveSubject.throwForce > 0)
                 {
-                    //Vector3 direction = holdableSubject.transform.position - rayPointer.position;
-                    Vector3 direction = dropoffPoint.forward;
-                    Vector3 finalForce = Vector3.zero;
-
-
-                    if (primaryHoldTime < holdableSubject.maxThrowHoldTime)
-                        finalForce = holdableSubject.throwForceFactor * direction * 100 * primaryHoldTime;
-                    else
-                        finalForce = holdableSubject.throwForceFactor * direction * 100 * holdableSubject.maxThrowHoldTime;
-
-                    Debug.Log("----- Final Throw Force: " + finalForce);
-                    subjectRbody.AddForce(finalForce);
+                    Vector3 direction = moveSubject.transform.position - rayPointer.position;
+                    subjectRbody.AddForce(moveSubject.throwForce * direction * 100);
                 }
             }
 
-            if (holdableSubject.myMagnetSnapper != null)
+            if (moveSubject.myMagnetSnapper != null)
             {
-                holdableSubject.myMagnetSnapper.ReleaseSubject();
+                moveSubject.myMagnetSnapper.ReleaseSubject();
             }
 
             //moveSubject.transform.parent = previousMoveParent;
-
-            holdableSubject.transform.parent = null;
+            moveSubject.transform.parent = null;
             previousMoveParent = null;
-            holdableSubject = null;
+            moveSubject = null;
         }
     }
 
 
     public void HandleNonclickableMovable()
     {
-        if(holdableSubject != null)
-        {
-            if(holdableSubject.hoverText.Length > 0)
-            {
-                HandleHoverText(true);
-            }
-        }
-
-
         if (interactState && !prevInteractState)
         {
-            //DropHoldable();
+            DropMovable();
         }
     }
 
-    public void HandleTypablesOnRaycastHit(InteractableGeneral hitSubject)
+    public void HandleTypables(InteractableGeneral hitSubject)
     {
         typeSubject = hitSubject.GetComponent<Typable>();
 
@@ -752,9 +643,7 @@ public class RaycastInteractor : MonoBehaviour
 
     public void OnNoClickable()
     {
-        subject = null;//make sure to de-register any previously selected subjects
         HandleHoverText(false);
-        
 
         if (interactableIndicator != null)
             interactableIndicator.SetActive(false);

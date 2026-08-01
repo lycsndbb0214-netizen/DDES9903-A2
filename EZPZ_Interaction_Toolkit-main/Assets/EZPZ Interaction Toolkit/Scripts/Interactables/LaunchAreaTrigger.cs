@@ -13,7 +13,7 @@ public class LaunchAreaTrigger : InteractableTrigger
     public Transform launchPoint;
     public float forceFactor = 10;
 
-    public override void OnTriggerEnter(Collider other)
+    public void OnTriggerEnter(Collider other)
     {
         Rigidbody r = other.gameObject.GetComponent<Rigidbody>();
 

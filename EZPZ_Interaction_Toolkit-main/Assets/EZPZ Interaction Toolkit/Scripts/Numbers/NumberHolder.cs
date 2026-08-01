@@ -11,7 +11,7 @@ using UnityEngine.UIElements;
 
 public class NumberHolder : MonoBehaviour
 {
-    public float value;
+    public float value;    
 
     [Header("Display Parameters")]
     public string prefix = "$ ";

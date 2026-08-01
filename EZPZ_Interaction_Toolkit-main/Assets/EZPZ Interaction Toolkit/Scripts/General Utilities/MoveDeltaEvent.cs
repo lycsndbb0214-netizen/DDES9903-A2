@@ -24,7 +24,7 @@ public class MoveDeltaEvent : MonoBehaviour
         if (subject == null)
             subject = gameObject.transform;
 
-        prevPos = subject.position;
+        prevPos = transform.position;
     }
 
     // Update is called once per frame
@@ -53,6 +53,6 @@ public class MoveDeltaEvent : MonoBehaviour
         }
 
 
-        prevPos = subject.position;
+        prevPos = transform.position;
     }
 }

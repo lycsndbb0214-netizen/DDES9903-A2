@@ -9,8 +9,7 @@ public class Holdable : InteractableGeneral
     [Header("Holdable Object Core Settings")]
     public UnityEvent onDrop;
     public Transform attachPoint;
-    public float throwForceFactor = 0;
-    public float maxThrowHoldTime = 2;
+    public float throwForce = 0;
     public bool noCollideOnHold = true;
     [Tooltip("Set to 'true' if you want the object to hug the environment.")]
     public bool groundPlace = false;
@@ -155,7 +154,7 @@ public class Holdable : InteractableGeneral
         if(myRayManipulator != null)
         {
             myRayManipulator.previousMoveParent = null;
-            myRayManipulator.holdableSubject = null;
+            myRayManipulator.moveSubject = null;
             myRayManipulator = null;
         }
 
