@@ -39,7 +39,7 @@ public class PhoneSubtitles : MonoBehaviour
         yield return new WaitForSeconds(1.5f);
 
         // 3. Audio 3.0s - 6.5s: "Iceberg approaching!"
-        UpdateText("Iceberg approaching!");
+        UpdateText("Iceberg... approaching...");
         yield return new WaitForSeconds(3.5f);
 
         // 4. Audio 6.5s - 10.5s: "Slow down..." followed by disconnect beep
