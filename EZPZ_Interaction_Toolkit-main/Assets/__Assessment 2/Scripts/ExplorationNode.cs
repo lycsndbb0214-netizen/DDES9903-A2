@@ -6,33 +6,47 @@ using TMPro;
 public class ExplorationNode : MonoBehaviour
 {
     [Header("Node Settings")]
-    public string nodeID = "MainDesk";
-    public Light deskLamp;              // Light component associated with this node
+    public string nodeID = "BoilerPipes";
+    public Light deskLamp;              // Warning light component
 
-    [Header("Computer Screen Effects")]
-    public TMP_Text screenText;         // TextMeshPro component on the computer screen
-    public float textFlickerSpeed = 4f; // Speed of screen text blinking
+    [Header("Light Behavior Control")]
+    public bool turnLightRedOnVisit = false;      // Turn light color to red when triggered
+    public bool keepFlashingAfterVisit = false;   // Keep light flashing erratically after visit
+
+    [Header("Audio & Particle Effects")]
+    public AudioSource triggerAudio;    // AudioSource for explosion / steam hiss sound
+    public GameObject[] vfxToEnable;    // Steam and fire particle effect GameObjects
+
+    [Header("Computer Screen Effects (Optional)")]
+    public TMP_Text screenText;         // TextMeshPro component on computer screen (if any)
+    public float textFlickerSpeed = 4f;
 
     [Header("Inner Monologue Subtitles")]
-    public GameObject subtitleTextObject; // UI Text Object for subtitles (e.g. Subtitle_Opening)
+    public GameObject subtitleTextObject; // UI Text Object for subtitles
     public string[] monologueLines = new string[] {
-        "That is weird...",
-        "The signal is all gone..."
+        "The steam pressure is dropping dangerously low...",
+        "We're losing control of the engines!"
     };
-    public float lineDuration = 3.0f;   // Display duration for each subtitle line
+    public float lineDuration = 3.0f;   // Display duration for each line
 
     private bool isNodeActive = false;  // Activated by PostPhoneTransition script
     private bool isVisited = false;
 
     private void Update()
     {
-        // 1. Desk Lamp Flickering (Gently flickers before being visited)
+        // 1. Lamp behavior BEFORE visit (gentle flicker)
         if (isNodeActive && !isVisited && deskLamp != null)
         {
             deskLamp.intensity = Mathf.PingPong(Time.time * 5f, 1.2f) + 0.4f;
         }
 
-        // 2. Computer Screen Text Blinking (Continuously modulates alpha)
+        // 2. Lamp behavior AFTER visit (if set to keep flashing in red)
+        if (isVisited && keepFlashingAfterVisit && deskLamp != null)
+        {
+            deskLamp.intensity = Random.Range(0.5f, 3.5f);
+        }
+
+        // 3. Screen Text Blinking (Optional)
         if (screenText != null)
         {
             Color c = screenText.color;
@@ -59,25 +73,50 @@ public class ExplorationNode : MonoBehaviour
         if (isVisited) return;
         isVisited = true;
 
-        // 1. Switch desk lamp to steady light
-        if (deskLamp != null)
+        // 1. Play explosion / steam sound effect
+        if (triggerAudio != null)
         {
-            deskLamp.intensity = 2.5f;
+            triggerAudio.Play();
         }
 
-        // 2. Play the node's inner monologue subtitles
+        // 2. Enable steam and fire particle effects
+        if (vfxToEnable != null)
+        {
+            foreach (GameObject vfx in vfxToEnable)
+            {
+                if (vfx != null)
+                {
+                    vfx.SetActive(true);
+                }
+            }
+        }
+
+        // 3. Change light color to red and set state
+        if (deskLamp != null)
+        {
+            if (turnLightRedOnVisit)
+            {
+                deskLamp.color = Color.red;
+            }
+
+            if (!keepFlashingAfterVisit)
+            {
+                deskLamp.intensity = 2.5f; // Solid steady light
+            }
+        }
+
+        // 4. Play inner monologue subtitles
         StartCoroutine(PlayMonologueRoutine());
 
         Debug.Log($"[Exploration] Node Completed: {nodeID}");
 
-        // 3. Notify StoryManager to record exploration progress
+        // 5. Notify StoryManager to update exploration progress
         if (StoryManager.Instance != null)
         {
             StoryManager.Instance.OnNodeVisited(nodeID);
         }
     }
 
-    // Sequence to display subtitle lines one by one
     private IEnumerator PlayMonologueRoutine()
     {
         if (subtitleTextObject == null || monologueLines == null || monologueLines.Length == 0) yield break;
@@ -93,7 +132,6 @@ public class ExplorationNode : MonoBehaviour
         subtitleTextObject.SetActive(false);
     }
 
-    // Helper method to update subtitle text on UI
     private void UpdateSubtitleText(string content)
     {
         if (subtitleTextObject == null) return;
