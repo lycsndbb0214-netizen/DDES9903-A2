@@ -10,6 +10,9 @@ public class PhoneSubtitles : MonoBehaviour
     [Header("Audio Settings")]
     public AudioSource emergencyAudioSource;
     private bool hasPlayed = false;
+    [Header("Storm Transition")]
+    public PostPhoneTransition stormTransition;
+
     public void PlayPhoneSubtitles()
     {
         if (hasPlayed) return;
@@ -30,19 +33,19 @@ public class PhoneSubtitles : MonoBehaviour
 
     private IEnumerator SubtitleSequence()
     {
-        // 1. Audio 0.0s - 1.5: "Emergency..." followed by static noise
+        //1. Audio 0.0s - 1.5: "Emergency..." followed by static noise
         UpdateText("Emergency...");
         yield return new WaitForSeconds(1.5f);
 
-        // 2. Audio 1.5s - 3.0s: "Emerg..." cut off by static noise
+        //2. Audio 1.5s - 3.0s: "Emerg..." cut off by static noise
         UpdateText("Emerg...");
         yield return new WaitForSeconds(1.5f);
 
-        // 3. Audio 3.0s - 6.5s: "Iceberg approaching!"
+        //3. Audio 3.0s - 6.5s: "Iceberg approaching!"
         UpdateText("Iceberg... approaching...");
         yield return new WaitForSeconds(3.5f);
 
-        // 4. Audio 6.5s - 10.5s: "Slow down..." followed by disconnect beep
+        //4. Audio 6.5s - 10.5s: "Slow down..." followed by disconnect beep
         UpdateText("Slow... down...");
         yield return new WaitForSeconds(4.0f);
 
@@ -50,8 +53,14 @@ public class PhoneSubtitles : MonoBehaviour
         UpdateText("(No Signal)");
         yield return new WaitForSeconds(1.5f);
 
-        // 5. Hide subtitle object after sequence completes
+        //6. Hide subtitle object after sequence completes
         subtitleTextObject.SetActive(false);
+
+        //7. Trigger storm transition after call ends
+        if (stormTransition != null)
+        {
+            stormTransition.TriggerStormTransition();
+        }
     }
 
     // Helper method to automatically assign text to Legacy UI or TextMeshPro components
