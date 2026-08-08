@@ -17,8 +17,14 @@ public class ShipMotion : MonoBehaviour
     public float stormHeave = 0.4f;    // Violent up/down heave
     public float stormSpeed = 1.8f;    // Fast storm speed
 
+    [Header("Collision Mode (Climax / Iceberg Impact)")]
+    public float collisionPitch = 6.0f;     // Extreme pitch angle during collision
+    public float collisionHeave = 0.6f;     // Extreme heave during collision
+    public float collisionSpeed = 3.0f;     // Fast motion speed during collision
+    public float backwardTiltAngle = 12.0f; // Backward tilt angle in degrees
+
     [Header("Transition Settings")]
-    public float transitionSpeed = 1.0f; // Speed of lerping to target mode
+    public float transitionSpeed = 1.0f;   // Speed of lerping to target mode
 
     private float currentPitch;
     private float currentHeave;
@@ -28,7 +34,7 @@ public class ShipMotion : MonoBehaviour
     private float targetHeave;
     private float targetSpeed;
 
-    private float pitchOffset = 0f;       // Fixed tilt angle for backward tilt
+    private float pitchOffset = 0f;
     private float targetPitchOffset = 0f;
 
     private Vector3 initialPos;
@@ -66,8 +72,8 @@ public class ShipMotion : MonoBehaviour
         currentSpeed = Mathf.Lerp(currentSpeed, targetSpeed, Time.deltaTime * transitionSpeed);
         pitchOffset = Mathf.Lerp(pitchOffset, targetPitchOffset, Time.deltaTime * transitionSpeed);
 
-        // Calculate ocean wave motion
-        float pitch = Mathf.Sin(Time.time * currentSpeed) * currentPitch + pitchOffset; // Includes backward tilt
+        // Calculate ocean wave motion including backward tilt angle
+        float pitch = Mathf.Sin(Time.time * currentSpeed) * currentPitch + pitchOffset;
         float roll = Mathf.Cos(Time.time * currentSpeed * 0.8f) * (currentPitch * 0.5f);
         float heave = Mathf.Sin(Time.time * currentSpeed * 1.5f) * currentHeave;
 
@@ -86,10 +92,10 @@ public class ShipMotion : MonoBehaviour
     // Trigger collision impact and tilt ship backward
     public void TriggerCollisionAndTiltBackward()
     {
-        targetPitch = stormPitch * 1.8f;
-        targetHeave = stormHeave * 1.5f;
-        targetSpeed = stormSpeed * 2.0f;
-        targetPitchOffset = 12.0f;       // Tilts the ship backward by 12 degrees
-        transitionSpeed = 2.5f;          // Fast transition on impact
+        targetPitch = collisionPitch;
+        targetHeave = collisionHeave;
+        targetSpeed = collisionSpeed;
+        targetPitchOffset = backwardTiltAngle; // Tilts ship backward by specified degrees
+        transitionSpeed = 2.5f;                // Fast transition speed on impact
     }
 }

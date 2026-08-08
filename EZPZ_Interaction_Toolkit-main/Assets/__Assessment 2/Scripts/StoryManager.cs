@@ -13,55 +13,62 @@ public class StoryManager : MonoBehaviour
 
     [Header("Climax (C1) - Iceberg & Radar")]
     public GameObject icebergModel;          // Iceberg model (Set active on collision)
-    public AudioSource radarAlarmAudioSource;// Radar alarm sound effect
-    public AudioSource collisionAudioSource; // Massive collision sound effect
+    public AudioSource radarAlarmAudioSource;// Radar alarm sound
+    public AudioSource collisionAudioSource; // Massive collision sound
 
-    [Header("Climax (C1) - Visuals & Light")]
-    public Light redAlarmLight;              // Red emergency flickering light
-    public Camera mainCamera;               // Main camera for tremor effect
-    public CanvasGroup fadeCanvasGroup;     // Screen fade out canvas group (Black scene)
+    [Header("Climax (C1) - Lights")]
+    public Light[] allShipLights;            // Array of all ship lights (Flicker red on collision)
+    public Light lifeboatGuideLight;         // Steady beacon light at lifeboat location (Off at start)
 
-    [Header("Resolution (C2) - Lifeboat")]
-    public GameObject lifeboatEndUI;        // Lifeboat resolution UI / Scene overlay
-    public AudioSource oceanWavesAudioSource;// Gentle ocean waves sound for lifeboat phase
+    [Header("Climax (C1) - Interactive Lifeboat")]
+    public GameObject lifeboatProp;          // Lifeboat object on deck (Set active after collision)
+
+    [Header("Climax (C1) - Inner Monologue Subtitles")]
+    public GameObject subtitleTextObject;    // Subtitle UI GameObject (Text or TMP_Text)
+
+    [Tooltip("Subtitle shown while radar alarm sounds during the 5-second wait")]
+    public string alarmMonologue = "What is that sound?!!";
+
+    [Tooltip("Subtitles shown sequentially after collision impact")]
+    public string[] collisionMonologueLines = new string[]
+    {
+        "OH NO! The ship ran aground!",
+        "We are sinking!",
+        "I need to go to the lifeboat now!"
+    };
+    public float lineDuration = 2.5f;        // Duration for each monologue line in seconds
+
+    [Header("Resolution (C2) - Ending UI")]
+    public GameObject lifeboatEndUI;        // Final black screen or end UI
+    public CanvasGroup fadeCanvasGroup;     // Screen fade canvas group
 
     private bool isClimaxStarted = false;
 
     private void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
     }
 
     private void Start()
     {
-        // Ensure iceberg is hidden at start
-        if (icebergModel != null)
-        {
-            icebergModel.SetActive(false);
-        }
+        if (icebergModel != null) icebergModel.SetActive(false);
+        if (lifeboatProp != null) lifeboatProp.SetActive(false);
+        if (lifeboatGuideLight != null) lifeboatGuideLight.gameObject.SetActive(false);
+        if (subtitleTextObject != null) subtitleTextObject.SetActive(false);
     }
 
-    // Called when player interacts with an exploration node
     public void OnNodeVisited(string nodeID)
     {
         visitedNodesCount++;
         Debug.Log($"[StoryManager] Node visited: {nodeID}. Progress: {visitedNodesCount}/{totalNodesRequired}");
     }
 
-    // Verify all 3 nodes have been visited
     public bool AreAllNodesVisited()
     {
         return visitedNodesCount >= totalNodesRequired;
     }
 
-    // Triggered by CabinClimaxTrigger when returning to cabin
     public void TriggerClimaxSequence()
     {
         if (isClimaxStarted) return;
@@ -69,73 +76,122 @@ public class StoryManager : MonoBehaviour
         StartCoroutine(TriggerStateC1_Climax());
     }
 
-    // Sequence matching your flowchart: Radar Alarm -> Collision & Tilt -> Black Scene -> Lifeboat
     private IEnumerator TriggerStateC1_Climax()
     {
-        Debug.Log("[StoryManager] Climax Phase Started!");
+        Debug.Log("[StoryManager] Climax Phase Started - Radar Alarm Sounding...");
 
-        // 1. Radar Alarm Sound
+        // 1. Play Radar Alarm Sound
         if (radarAlarmAudioSource != null)
         {
             radarAlarmAudioSource.Play();
         }
 
-        yield return new WaitForSeconds(1.0f); // Brief delay before impact
-
-        // 2. Collision Event: Show Iceberg & Play Collision Sound
-        if (icebergModel != null)
+        // Show Stage 1 Subtitle during alarm
+        if (subtitleTextObject != null && !string.IsNullOrEmpty(alarmMonologue))
         {
-            icebergModel.SetActive(true); // Show iceberg at ship bow
+            subtitleTextObject.SetActive(true);
+            UpdateSubtitleText(alarmMonologue);
         }
 
-        if (collisionAudioSource != null)
+        // Wait 5 seconds for alarmÔ¤ÈÈ
+        yield return new WaitForSeconds(5.0f);
+
+        // Hide alarm subtitle before collision sequence starts
+        if (subtitleTextObject != null)
         {
-            collisionAudioSource.Play();
+            subtitleTextObject.SetActive(false);
         }
 
-        // 3. Tilt ship backward and intensify rocking via ShipMotion
+        Debug.Log("[StoryManager] 5 Seconds Alarm Ended -> Massive Collision Impact!");
+
+        // 2. Collision Impact: Iceberg, Audio, Ship Motion
+        if (icebergModel != null) icebergModel.SetActive(true);
+        if (collisionAudioSource != null) collisionAudioSource.Play();
+
         if (ShipMotion.Instance != null)
         {
             ShipMotion.Instance.TriggerCollisionAndTiltBackward();
         }
 
-        // 4. Enable Red Alarm Light
-        if (redAlarmLight != null)
+        // 3. Enable Lifeboat Prop and Guide Light
+        if (lifeboatProp != null) lifeboatProp.SetActive(true);
+
+        if (lifeboatGuideLight != null)
         {
-            redAlarmLight.gameObject.SetActive(true);
+            lifeboatGuideLight.gameObject.SetActive(true);
+            lifeboatGuideLight.color = Color.yellow;
+            lifeboatGuideLight.intensity = 4.0f;
         }
 
-        // 5. Massive Tremor (Camera Shake) & Red Light Flickering
-        float timer = 0f;
-        float climaxDuration = 4.5f;
-        Vector3 originalCamPos = mainCamera != null ? mainCamera.transform.localPosition : Vector3.zero;
+        // 4. Turn all ship lights RED and start flickering loop
+        StartCoroutine(FlickerShipLights());
 
-        while (timer < climaxDuration)
+        // 5. Play Stage 2 Collision Monologue Subtitles
+        StartCoroutine(PlayCollisionSubtitles());
+    }
+
+    private IEnumerator PlayCollisionSubtitles()
+    {
+        if (subtitleTextObject == null || collisionMonologueLines == null || collisionMonologueLines.Length == 0)
+            yield break;
+
+        subtitleTextObject.SetActive(true);
+
+        foreach (string line in collisionMonologueLines)
         {
-            timer += Time.deltaTime;
+            UpdateSubtitleText(line);
+            yield return new WaitForSeconds(lineDuration);
+        }
 
-            // Red light flickering
-            if (redAlarmLight != null)
+        subtitleTextObject.SetActive(false);
+    }
+
+    private void UpdateSubtitleText(string content)
+    {
+        if (subtitleTextObject == null) return;
+
+        Text legacyText = subtitleTextObject.GetComponent<Text>();
+        if (legacyText != null)
+        {
+            legacyText.text = content;
+            return;
+        }
+
+        TMP_Text tmpText = subtitleTextObject.GetComponent<TMP_Text>();
+        if (tmpText != null)
+        {
+            tmpText.text = content;
+        }
+    }
+
+    private IEnumerator FlickerShipLights()
+    {
+        while (isClimaxStarted)
+        {
+            float intensity = Mathf.PingPong(Time.time * 12f, 4.5f);
+            if (allShipLights != null)
             {
-                redAlarmLight.intensity = Mathf.PingPong(Time.time * 12f, 4.5f);
+                foreach (Light l in allShipLights)
+                {
+                    if (l != null && l != lifeboatGuideLight)
+                    {
+                        l.gameObject.SetActive(true);
+                        l.color = Color.red;
+                        l.intensity = intensity;
+                    }
+                }
             }
-
-            // Massive camera tremor
-            if (mainCamera != null)
-            {
-                mainCamera.transform.localPosition = originalCamPos + (Vector3)Random.insideUnitCircle * 0.2f;
-            }
-
             yield return null;
         }
+    }
 
-        // Reset camera position
-        if (mainCamera != null)
-        {
-            mainCamera.transform.localPosition = originalCamPos;
-        }
+    public void OnPlayerEnteredLifeboat()
+    {
+        StartCoroutine(PlayEndingSequence());
+    }
 
-        // 6. Black Scene Transition (Fade to Black)
+    private IEnumerator PlayEndingSequence()
+    {
         if (fadeCanvasGroup != null)
         {
             float fadeTimer = 0f;
@@ -147,31 +203,6 @@ public class StoryManager : MonoBehaviour
             }
         }
 
-        // 7. Transition to Resolution (Lifeboat Phase)
-        TriggerStateC2_Resolution();
-    }
-
-    // Sequence for Resolution: Lifeboat Phase
-    private void TriggerStateC2_Resolution()
-    {
-        Debug.Log("[StoryManager] Resolution Phase Started: Lifeboat.");
-
-        // Stop radar alarm if still playing
-        if (radarAlarmAudioSource != null && radarAlarmAudioSource.isPlaying)
-        {
-            radarAlarmAudioSource.Stop();
-        }
-
-        // Play gentle ocean wave sound
-        if (oceanWavesAudioSource != null)
-        {
-            oceanWavesAudioSource.Play();
-        }
-
-        // Display Lifeboat Resolution UI
-        if (lifeboatEndUI != null)
-        {
-            lifeboatEndUI.SetActive(true);
-        }
+        if (lifeboatEndUI != null) lifeboatEndUI.SetActive(true);
     }
 }
