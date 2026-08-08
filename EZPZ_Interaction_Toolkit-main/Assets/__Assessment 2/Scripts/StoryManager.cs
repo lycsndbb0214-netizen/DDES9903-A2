@@ -1,7 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using TMPro;
-using UnityEngine.UI;
+using UnityEngine.UI; // Essential for UI Image manipulation
 
 public class StoryManager : MonoBehaviour
 {
@@ -12,19 +12,19 @@ public class StoryManager : MonoBehaviour
     private int visitedNodesCount = 0;
 
     [Header("Climax (C1) - Iceberg & Radar")]
-    public GameObject icebergModel;          // Iceberg model (Set active on collision)
-    public AudioSource radarAlarmAudioSource;// Radar alarm sound
-    public AudioSource collisionAudioSource; // Massive collision sound
+    public GameObject icebergModel;
+    public AudioSource radarAlarmAudioSource;
+    public AudioSource collisionAudioSource;
 
     [Header("Climax (C1) - Lights")]
-    public Light[] allShipLights;            // Array of all ship lights (Flicker red on collision)
-    public Light lifeboatGuideLight;         // Steady beacon light at lifeboat location (Off at start)
+    public Light[] allShipLights;
+    public Light lifeboatGuideLight;
 
     [Header("Climax (C1) - Interactive Lifeboat")]
-    public GameObject lifeboatProp;          // Lifeboat object on deck (Set active after collision)
+    public GameObject lifeboatProp;
 
     [Header("Climax (C1) - Inner Monologue Subtitles")]
-    public GameObject subtitleTextObject;    // Subtitle UI GameObject (Text or TMP_Text)
+    public GameObject subtitleTextObject;
 
     [Tooltip("Subtitle shown while radar alarm sounds during the 5-second wait")]
     public string alarmMonologue = "What is that sound?!!";
@@ -36,13 +36,17 @@ public class StoryManager : MonoBehaviour
         "We are sinking!",
         "I need to go to the lifeboat now!"
     };
-    public float lineDuration = 2.5f;        // Duration for each monologue line in seconds
+    public float lineDuration = 3.0f;
 
-    [Header("Resolution (C2) - Ending UI")]
-    public GameObject lifeboatEndUI;        // Final black screen or end UI
-    public CanvasGroup fadeCanvasGroup;     // Screen fade canvas group
+    [Header("Resolution (C2) - Ending Fade UI")]
+    [Tooltip("Assign the same BlackScreen Image used in the intro here")]
+    public Image blackScreenImage;          // Swapped out CanvasGroup for direct Image manipulation
+    public GameObject lifeboatEndUI;
+    public float fadeDuration = 3.0f;
 
     private bool isClimaxStarted = false;
+    private bool isCinematicStarted = false;
+    private bool isFadingToBlack = false;
 
     private void Awake()
     {
@@ -56,12 +60,12 @@ public class StoryManager : MonoBehaviour
         if (lifeboatProp != null) lifeboatProp.SetActive(false);
         if (lifeboatGuideLight != null) lifeboatGuideLight.gameObject.SetActive(false);
         if (subtitleTextObject != null) subtitleTextObject.SetActive(false);
+        if (lifeboatEndUI != null) lifeboatEndUI.SetActive(false);
     }
 
     public void OnNodeVisited(string nodeID)
     {
         visitedNodesCount++;
-        Debug.Log($"[StoryManager] Node visited: {nodeID}. Progress: {visitedNodesCount}/{totalNodesRequired}");
     }
 
     public bool AreAllNodesVisited()
@@ -78,33 +82,18 @@ public class StoryManager : MonoBehaviour
 
     private IEnumerator TriggerStateC1_Climax()
     {
-        Debug.Log("[StoryManager] Climax Phase Started - Radar Alarm Sounding...");
+        if (radarAlarmAudioSource != null) radarAlarmAudioSource.Play();
 
-        // 1. Play Radar Alarm Sound
-        if (radarAlarmAudioSource != null)
-        {
-            radarAlarmAudioSource.Play();
-        }
-
-        // Show Stage 1 Subtitle during alarm
         if (subtitleTextObject != null && !string.IsNullOrEmpty(alarmMonologue))
         {
             subtitleTextObject.SetActive(true);
             UpdateSubtitleText(alarmMonologue);
         }
 
-        // Wait 5 seconds for alarmÔ¤ÈÈ
         yield return new WaitForSeconds(5.0f);
 
-        // Hide alarm subtitle before collision sequence starts
-        if (subtitleTextObject != null)
-        {
-            subtitleTextObject.SetActive(false);
-        }
+        if (subtitleTextObject != null) subtitleTextObject.SetActive(false);
 
-        Debug.Log("[StoryManager] 5 Seconds Alarm Ended -> Massive Collision Impact!");
-
-        // 2. Collision Impact: Iceberg, Audio, Ship Motion
         if (icebergModel != null) icebergModel.SetActive(true);
         if (collisionAudioSource != null) collisionAudioSource.Play();
 
@@ -113,20 +102,16 @@ public class StoryManager : MonoBehaviour
             ShipMotion.Instance.TriggerCollisionAndTiltBackward();
         }
 
-        // 3. Enable Lifeboat Prop and Guide Light
         if (lifeboatProp != null) lifeboatProp.SetActive(true);
 
         if (lifeboatGuideLight != null)
         {
             lifeboatGuideLight.gameObject.SetActive(true);
-            lifeboatGuideLight.color = Color.yellow;
-            lifeboatGuideLight.intensity = 4.0f;
+            lifeboatGuideLight.color = Color.green;
+            lifeboatGuideLight.intensity = 100.0f;
         }
 
-        // 4. Turn all ship lights RED and start flickering loop
         StartCoroutine(FlickerShipLights());
-
-        // 5. Play Stage 2 Collision Monologue Subtitles
         StartCoroutine(PlayCollisionSubtitles());
     }
 
@@ -136,32 +121,21 @@ public class StoryManager : MonoBehaviour
             yield break;
 
         subtitleTextObject.SetActive(true);
-
         foreach (string line in collisionMonologueLines)
         {
             UpdateSubtitleText(line);
             yield return new WaitForSeconds(lineDuration);
         }
-
         subtitleTextObject.SetActive(false);
     }
 
     private void UpdateSubtitleText(string content)
     {
         if (subtitleTextObject == null) return;
-
         Text legacyText = subtitleTextObject.GetComponent<Text>();
-        if (legacyText != null)
-        {
-            legacyText.text = content;
-            return;
-        }
-
+        if (legacyText != null) { legacyText.text = content; return; }
         TMP_Text tmpText = subtitleTextObject.GetComponent<TMP_Text>();
-        if (tmpText != null)
-        {
-            tmpText.text = content;
-        }
+        if (tmpText != null) tmpText.text = content;
     }
 
     private IEnumerator FlickerShipLights()
@@ -185,24 +159,54 @@ public class StoryManager : MonoBehaviour
         }
     }
 
-    public void OnPlayerEnteredLifeboat()
+    public void StartCinematicEnding()
     {
+        if (isCinematicStarted) return;
+        isCinematicStarted = true;
+        if (ShipMotion.Instance != null) ShipMotion.Instance.StartSinking();
+    }
+
+    // Triggered when SecondLifeboat reaches the stop threshold distance
+    public void TriggerFadeToBlack()
+    {
+        if (isFadingToBlack) return;
+        isFadingToBlack = true;
         StartCoroutine(PlayEndingSequence());
     }
 
     private IEnumerator PlayEndingSequence()
     {
-        if (fadeCanvasGroup != null)
+        Debug.Log("[StoryManager] Direct Image alpha transition initiated.");
+
+        if (blackScreenImage != null)
         {
+            // Ensure the black screen GameObject is reactivated (since IntroDirector set it inactive)
+            blackScreenImage.gameObject.SetActive(true);
+
             float fadeTimer = 0f;
-            while (fadeTimer < 2.0f)
+            Color currColor = Color.black; // Maintain solid black base color
+
+            while (fadeTimer < fadeDuration)
             {
                 fadeTimer += Time.deltaTime;
-                fadeCanvasGroup.alpha = Mathf.Clamp01(fadeTimer / 2.0f);
+                // Linearly interpolate the color alpha channel from transparent (0) to opaque (1)
+                currColor.a = Mathf.Clamp01(fadeTimer / fadeDuration);
+                blackScreenImage.color = currColor;
                 yield return null;
             }
+
+            currColor.a = 1.0f;
+            blackScreenImage.color = currColor;
         }
 
-        if (lifeboatEndUI != null) lifeboatEndUI.SetActive(true);
+        if (lifeboatEndUI != null)
+        {
+            lifeboatEndUI.SetActive(true);
+        }
+    }
+
+    public void OnPlayerEnteredLifeboat()
+    {
+        StartCinematicEnding();
     }
 }
