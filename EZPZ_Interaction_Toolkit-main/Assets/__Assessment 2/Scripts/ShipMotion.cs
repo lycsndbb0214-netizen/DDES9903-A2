@@ -2,6 +2,8 @@ using UnityEngine;
 
 public class ShipMotion : MonoBehaviour
 {
+    public static ShipMotion Instance;
+
     [Header("Motion Toggle")]
     public bool isRocking = true;
 
@@ -16,7 +18,7 @@ public class ShipMotion : MonoBehaviour
     public float stormSpeed = 1.8f;    // Fast storm speed
 
     [Header("Transition Settings")]
-    public float transitionSpeed = 1.0f; // Speed of lerping to storm mode
+    public float transitionSpeed = 1.0f; // Speed of lerping to target mode
 
     private float currentPitch;
     private float currentHeave;
@@ -26,15 +28,25 @@ public class ShipMotion : MonoBehaviour
     private float targetHeave;
     private float targetSpeed;
 
+    private float pitchOffset = 0f;       // Fixed tilt angle for backward tilt
+    private float targetPitchOffset = 0f;
+
     private Vector3 initialPos;
     private Quaternion initialRot;
+
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+    }
 
     private void Start()
     {
         initialPos = transform.localPosition;
         initialRot = transform.localRotation;
 
-        // Initialize with gentle normal parameters
         currentPitch = normalPitch;
         currentHeave = normalHeave;
         currentSpeed = normalSpeed;
@@ -52,9 +64,10 @@ public class ShipMotion : MonoBehaviour
         currentPitch = Mathf.Lerp(currentPitch, targetPitch, Time.deltaTime * transitionSpeed);
         currentHeave = Mathf.Lerp(currentHeave, targetHeave, Time.deltaTime * transitionSpeed);
         currentSpeed = Mathf.Lerp(currentSpeed, targetSpeed, Time.deltaTime * transitionSpeed);
+        pitchOffset = Mathf.Lerp(pitchOffset, targetPitchOffset, Time.deltaTime * transitionSpeed);
 
-        // Calculate smooth ocean wave motion
-        float pitch = Mathf.Sin(Time.time * currentSpeed) * currentPitch;
+        // Calculate ocean wave motion
+        float pitch = Mathf.Sin(Time.time * currentSpeed) * currentPitch + pitchOffset; // Includes backward tilt
         float roll = Mathf.Cos(Time.time * currentSpeed * 0.8f) * (currentPitch * 0.5f);
         float heave = Mathf.Sin(Time.time * currentSpeed * 1.5f) * currentHeave;
 
@@ -62,11 +75,21 @@ public class ShipMotion : MonoBehaviour
         transform.localPosition = initialPos + new Vector3(0, heave, 0);
     }
 
-    // Call this function when the phone call finishes to trigger storm motion
+    // Trigger storm motion after phone call
     public void TriggerStormMotion()
     {
         targetPitch = stormPitch;
         targetHeave = stormHeave;
         targetSpeed = stormSpeed;
+    }
+
+    // Trigger collision impact and tilt ship backward
+    public void TriggerCollisionAndTiltBackward()
+    {
+        targetPitch = stormPitch * 1.8f;
+        targetHeave = stormHeave * 1.5f;
+        targetSpeed = stormSpeed * 2.0f;
+        targetPitchOffset = 12.0f;       // Tilts the ship backward by 12 degrees
+        transitionSpeed = 2.5f;          // Fast transition on impact
     }
 }

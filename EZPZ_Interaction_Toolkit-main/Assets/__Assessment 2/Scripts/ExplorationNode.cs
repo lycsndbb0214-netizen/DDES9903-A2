@@ -6,47 +6,67 @@ using TMPro;
 public class ExplorationNode : MonoBehaviour
 {
     [Header("Node Settings")]
-    public string nodeID = "BoilerPipes";
-    public Light deskLamp;              // Warning light component
+    public string nodeID = "Telescope";
+    public Light deskLamp;
 
     [Header("Light Behavior Control")]
-    public bool turnLightRedOnVisit = false;      // Turn light color to red when triggered
-    public bool keepFlashingAfterVisit = false;   // Keep light flashing erratically after visit
+    public bool turnLightRedOnVisit = false;
+    public bool keepFlashingAfterVisit = false;
 
     [Header("Audio & Particle Effects")]
-    public AudioSource triggerAudio;    // AudioSource for explosion / steam hiss sound
-    public GameObject[] vfxToEnable;    // Steam and fire particle effect GameObjects
+    public AudioSource triggerAudio;
+    public GameObject[] vfxToEnable;
 
     [Header("Computer Screen Effects (Optional)")]
-    public TMP_Text screenText;         // TextMeshPro component on computer screen (if any)
+    public TMP_Text screenText;
     public float textFlickerSpeed = 4f;
 
-    [Header("Inner Monologue Subtitles")]
-    public GameObject subtitleTextObject; // UI Text Object for subtitles
-    public string[] monologueLines = new string[] {
-        "The steam pressure is dropping dangerously low...",
-        "We're losing control of the engines!"
-    };
-    public float lineDuration = 3.0f;   // Display duration for each line
+    [Header("Telescope Settings (Optional)")]
+    public bool isTelescopeNode = false;
+    public GameObject telescopeScopeUI;
+    public Camera mainCamera;
+    public float telescopeFOV = 15f;
 
-    private bool isNodeActive = false;  // Activated by PostPhoneTransition script
+    [Header("Inner Monologue Subtitles")]
+    public GameObject subtitleTextObject;
+    public string[] monologueLines = new string[] {
+        "The fog is so big...",
+        "I can't see anything..."
+    };
+    public float lineDuration = 3.0f;
+
+    private bool isNodeActive = false;
     private bool isVisited = false;
+    private float originalFOV;
+
+    private void Start()
+    {
+        // Store main camera reference and original FOV
+        if (mainCamera == null)
+        {
+            mainCamera = Camera.main;
+        }
+        if (mainCamera != null)
+        {
+            originalFOV = mainCamera.fieldOfView;
+        }
+    }
 
     private void Update()
     {
-        // 1. Lamp behavior BEFORE visit (gentle flicker)
+        // Lamp gentle flicker before interaction
         if (isNodeActive && !isVisited && deskLamp != null)
         {
             deskLamp.intensity = Mathf.PingPong(Time.time * 5f, 1.2f) + 0.4f;
         }
 
-        // 2. Lamp behavior AFTER visit (if set to keep flashing in red)
+        // Lamp erratic flash after interaction
         if (isVisited && keepFlashingAfterVisit && deskLamp != null)
         {
             deskLamp.intensity = Random.Range(0.5f, 3.5f);
         }
 
-        // 3. Screen Text Blinking (Optional)
+        // Screen text blinking animation
         if (screenText != null)
         {
             Color c = screenText.color;
@@ -55,11 +75,13 @@ public class ExplorationNode : MonoBehaviour
         }
     }
 
+    // Called by PostPhoneTransitionManager to activate node
     public void ActivateNode()
     {
         isNodeActive = true;
     }
 
+    // Trigger zone detection
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("Player") || other.CompareTag("MainCamera") || other.GetComponent<Camera>() != null)
@@ -68,18 +90,19 @@ public class ExplorationNode : MonoBehaviour
         }
     }
 
+    // Core node interaction logic (Can be called by Trigger or Interactable script)
     public void CompleteNode()
     {
         if (isVisited) return;
         isVisited = true;
 
-        // 1. Play explosion / steam sound effect
+        // Play audio effect
         if (triggerAudio != null)
         {
             triggerAudio.Play();
         }
 
-        // 2. Enable steam and fire particle effects
+        // Enable particle VFX
         if (vfxToEnable != null)
         {
             foreach (GameObject vfx in vfxToEnable)
@@ -87,11 +110,16 @@ public class ExplorationNode : MonoBehaviour
                 if (vfx != null)
                 {
                     vfx.SetActive(true);
+                    ParticleSystem ps = vfx.GetComponentInChildren<ParticleSystem>();
+                    if (ps != null)
+                    {
+                        ps.Play();
+                    }
                 }
             }
         }
 
-        // 3. Change light color to red and set state
+        // Update light color and state
         if (deskLamp != null)
         {
             if (turnLightRedOnVisit)
@@ -101,37 +129,55 @@ public class ExplorationNode : MonoBehaviour
 
             if (!keepFlashingAfterVisit)
             {
-                deskLamp.intensity = 2.5f; // Solid steady light
+                deskLamp.intensity = 2.5f; // Steady solid light
             }
         }
 
-        // 4. Play inner monologue subtitles
+        // Play subtitles and camera sequence
         StartCoroutine(PlayMonologueRoutine());
 
         Debug.Log($"[Exploration] Node Completed: {nodeID}");
 
-        // 5. Notify StoryManager to update exploration progress
+        // Notify StoryManager
         if (StoryManager.Instance != null)
         {
             StoryManager.Instance.OnNodeVisited(nodeID);
         }
     }
 
+    // Subtitle sequence and telescope view control
     private IEnumerator PlayMonologueRoutine()
     {
-        if (subtitleTextObject == null || monologueLines == null || monologueLines.Length == 0) yield break;
-
-        subtitleTextObject.SetActive(true);
-
-        foreach (string line in monologueLines)
+        // Enter telescope view (Zoom camera and show UI overlay)
+        if (isTelescopeNode)
         {
-            UpdateSubtitleText(line);
-            yield return new WaitForSeconds(lineDuration);
+            if (telescopeScopeUI != null) telescopeScopeUI.SetActive(true);
+            if (mainCamera != null) mainCamera.fieldOfView = telescopeFOV;
         }
 
-        subtitleTextObject.SetActive(false);
+        // Display monologue subtitles line by line
+        if (subtitleTextObject != null && monologueLines != null && monologueLines.Length > 0)
+        {
+            subtitleTextObject.SetActive(true);
+
+            foreach (string line in monologueLines)
+            {
+                UpdateSubtitleText(line);
+                yield return new WaitForSeconds(lineDuration);
+            }
+
+            subtitleTextObject.SetActive(false);
+        }
+
+        // Exit telescope view (Restore camera FOV and hide UI overlay)
+        if (isTelescopeNode)
+        {
+            if (telescopeScopeUI != null) telescopeScopeUI.SetActive(false);
+            if (mainCamera != null) mainCamera.fieldOfView = originalFOV;
+        }
     }
 
+    // Update UI text content
     private void UpdateSubtitleText(string content)
     {
         if (subtitleTextObject == null) return;
